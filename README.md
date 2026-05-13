@@ -5,7 +5,7 @@ date: "2023-06-11" # Date you first upload your project.
 title: "Regression-Modelling ERPs (and More!)"
 
 # Sole author
-name: [perception Lin]
+name: [Amanda Lin]
 
 # Your project GitHub repository URL
 github_repo: https://github.com/amandalin047/Amanda_BrainHack_2023
