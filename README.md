@@ -22,7 +22,7 @@ summary: "Emotion perception is contextualized. However, how emotional context m
 
 # Regression-Modelling ERPs (and More!)
 ## Background
-<img src="https://github.com/amandalin047/regression-based_ERP/tree/archive/inline_img/binned_results.png" alt="Grand Average ERPs" width="900" height="400">
+<img src="https://github.com/amandalin047/regression-based_ERP/blob/archive/inline_img/binned_results.png" alt="Grand Average ERPs" width="900" height="400">
 Emotion perception is contextualized. However, how emotional context modulates word processing is unclear. We tested 20 young native speakers who read 208 Taiwan Mandarin sentences with varied emotionality conveyed through the context. To deal with multiple covarying factors in natural language, we adopted a regression-based rERP method to titrate the contextual effects. Moreover, as we plan on conducting a subsequent experiment to follow up on the findings the present study has revealed, this project also includes the code for constructing experimental stimuli.
 
 ## Tools
@@ -58,7 +58,7 @@ This project has implemented the following programming languages and brain imagi
 - **Stimuli Construction**
     + I started developing the Python code for compiling ratings Excel sheets roughly around March.
     + A massive round of ratings was carried out in April, thus calling for a means to automatically label, upload, and reply to incoming participant emails.
-<p>&nbsp</p><img src="https://github.com/amandalin047/regression-based_ERP/tree/archive/inline_img/apps_script.png" alt="Google Apps Script" width="700" height="300">
+<p>&nbsp</p><img src="https://github.com/amandalin047/regression-based_ERP/blob/archive/inline_img/apps_script.png" alt="Google Apps Script" width="700" height="300">
 
 ## Skillsets Learned
 - **MNE-Python**: As a math undergraduate, I was initially trained in C++ and never formally took Python (I could read and code in Python as languages that support OOP share some similarities, yet I was far from proficient). It was not easy-peasy to start a Python program from scratch with the limited syntax I knew at the time; I'd spent countless hours Googling, sifting through threads on GitHub and Stack Overflow. As such, I genuinely find amazing how much I've learned and matured this semester in terms of Python programming skills, not only through my own project, but also as a TA working with the students.
@@ -72,7 +72,7 @@ This project has implemented the following programming languages and brain imagi
     + Greater implausibility elicited more negative and then more positive responses during 250-500ms and 600-1000ms, respectively, over central-posterior regions, which well-replicated the past ERP literature on the N400 plausibility effect and thus provided justification for our regression model. Further, this plausibility effect was not modulated by context valence, suggesting no evidence for the Affective Primacy hypothesis in sentence comprehension where one would've expected a significant interaction between the two.    
     + A frontally distributed effect of word emotionality during 400ms to 700ms.
     + These findings showed that linguistic emotional context modulates subsequent word processing over and beyond sentence constraint and word emotionality, corroborating robust contextualized emotion processing in reading.
-<p>&nbsp</p><img src="https://github.com/amandalin047/regression-based_ERP/tree/archive/inline_img/rerp_coef.png" alt="rERP Coefficients" width="700" height="700">
+<p>&nbsp</p><img src="https://github.com/amandalin047/regression-based_ERP/blob/archive/inline_img/rerp_coef.png" alt="rERP Coefficients" width="700" height="700">
 
 - **Stimui Construction**
     + A great learning oppurtunity as we've come to realize which response collection methods are more efficient (and less tedious). 
