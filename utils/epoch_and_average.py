@@ -5,7 +5,9 @@ from collections import OrderedDict
 from collections.abc import Iterable
 
 def revise_annot(df_annot: pd.DataFrame, *,
-                 fixation: str, non_final: str, item_codes: list|tuple,
+                 fixation: str, non_final: str,
+                 codes_after_fixation: list|tuple|set|None=None,
+                 codes_after_fixation_are_final: bool=False,
                  **conditions) -> mne.Annotations:   
     """IMPORTANT!!!
        df_annot: please get the data frame via pd.DataFrame(raw.annotations);
@@ -32,18 +34,26 @@ def revise_annot(df_annot: pd.DataFrame, *,
     desc = [d.strip() for d in desc]  # remove leading or trailing white spaces to be safe
     desc_revised = desc.copy()
 
+    if codes_after_fixation is None:
+        codes_after_fixation = set([desc[i] for i in range(len(desc)) if desc[i-1] == fixation])
+    #else:
+        #assert set(codes_after_fixation) == set([desc[i] for i in range(len(desc)) if desc[i-1] == fixation])
+
     for i, d in enumerate(desc):
         if d == fixation:
             step = 1
         elif d == non_final:
             desc_revised[i] = "w" + str(step) 
             step += 1
-        elif d in item_codes:
+        elif d in codes_after_fixation:
             if desc[i-1] == fixation:
                 desc_revised[i] = "w" + str(step) 
                 step += 1
             elif desc[i-1] == non_final:
-                desc_revised[i] = "w" + str(step) 
+                if not codes_after_fixation_are_final:
+                    desc_revised[i] = "w" + str(step) 
+            else:
+                pass
         elif d in all_cond_codes.flatten():  # use flatten, as flatten always returns a copy; need all_cond_codes to stay 2D
             cond_idx = np.where(all_cond_codes == d)[0][0]
             cond = cond_descs[cond_idx]
@@ -56,7 +66,8 @@ def revise_annot(df_annot: pd.DataFrame, *,
 def eeglab_logic_bin_epoch(raw: mne.io.Raw,
                      fixation: str,
                      non_final: str,
-                     item_codes: list|tuple,
+                     codes_after_fixation: list|tuple|set|None,
+                     codes_after_fixation_are_final: bool,
                      position_range: tuple,
                      conditions_list: list,
                      tmin: float, tmax: float,
@@ -87,7 +98,8 @@ def eeglab_logic_bin_epoch(raw: mne.io.Raw,
         annot_revised = revise_annot(df_annot.copy(),
                                  fixation=fixation,
                                  non_final=non_final,
-                                 item_codes=item_codes,
+                                 codes_after_fixation=codes_after_fixation,
+                                 codes_after_fixation_are_final=codes_after_fixation_are_final,
                                  **conditions)
         raw_revised = raw.copy()
         raw_revised.set_annotations(annot_revised)
