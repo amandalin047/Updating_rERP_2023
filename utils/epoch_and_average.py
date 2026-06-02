@@ -3,17 +3,22 @@ import pandas as pd
 import mne
 from collections import OrderedDict
 from collections.abc import Iterable
+from typing import Callable
 
 def revise_annot(df_annot: pd.DataFrame, *,
                  fixation: str, non_final: str,
                  codes_after_fixation: list|tuple|set|None=None,
                  codes_after_fixation_are_final: bool=False,
+                 transform_description: Callable|None=None,
                  **conditions) -> mne.Annotations:   
     """IMPORTANT!!!
        df_annot: please get the data frame via pd.DataFrame(raw.annotations);
                  do NOT use raw.annotations.to_data_frame() -- I don't know why this causes downstream annotations setting to be empty, i.e.,
                  if annot_revised is the returned revised mne.Annotations object, then doing
                  raw.set_annotations(annot_revised) will lead to empty annoations.
+       transform_description is needed when there are sub-conditions in the condition codes, e.g.,
+       event code 'S241' indicates Emo_SCE, where the frame is positive if followed by event code 1-15,
+       negative if followed by 16-30. transform_description should take a numpy array and return a numpy array
        conditions should be: event_description=event_codes, where event_codes is an iterable, e.g.,
        high_constraint=(240, 241, 242, 243), low_constraint=(244, 245, 246, 247)"""
     
@@ -23,6 +28,10 @@ def revise_annot(df_annot: pd.DataFrame, *,
         Please ensure that df_annot is converted directly via Pandas DataFrame constructor, i.e.,
         df_annot = Pandas.DataFrame(mne.Annotations).""")
         return
+    
+    if transform_description is not None:
+        arr = df_annot["description"].to_numpy()
+        df_annot["description"] = transform_description(arr)
     
     cond_dict = OrderedDict({key: [str(v) for v in val]
                                           for key, val in conditions.items()}) # in case integer event codes are passed
