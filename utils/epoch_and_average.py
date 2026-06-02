@@ -27,8 +27,12 @@ def revise_annot(df_annot: pd.DataFrame, *,
     cond_dict = OrderedDict({key: [str(v) for v in val]
                                           for key, val in conditions.items()}) # in case integer event codes are passed
                                                                                # and ensures key (condition description) order
+    max_length = max([len(v) for v in cond_dict.values()])
+    all_cond_codes = np.array([np.pad(list(v),
+                                      pad_width=(0, max_length-len(v)),
+                                      constant_values="")
+                               for v in cond_dict.values()])
     cond_descs = list(cond_dict.keys())
-    all_cond_codes = np.array(list(cond_dict.values()))
     
     desc = list(df_annot["description"])
     desc = [d.strip() for d in desc]  # remove leading or trailing white spaces to be safe
@@ -38,6 +42,11 @@ def revise_annot(df_annot: pd.DataFrame, *,
         codes_after_fixation = set([desc[i] for i in range(len(desc)) if desc[i-1] == fixation])
     #else:
         #assert set(codes_after_fixation) == set([desc[i] for i in range(len(desc)) if desc[i-1] == fixation])
+
+    if codes_after_fixation_are_final:
+        # if the event codes after fixation are also final word event codes
+        # they are also condition codes since our lab's experiments' target words are almost always sentence-final
+        assert (set(codes_after_fixation) | set([""])) - set(all_cond_codes.flatten()) == set()
 
     for i, d in enumerate(desc):
         if d == fixation:
@@ -50,16 +59,20 @@ def revise_annot(df_annot: pd.DataFrame, *,
                 desc_revised[i] = "w" + str(step) 
                 step += 1
             elif desc[i-1] == non_final:
-                if not codes_after_fixation_are_final:
+                if codes_after_fixation_are_final:
+                    if d in all_cond_codes.flatten():
+                        cond_idx = np.where(all_cond_codes == d)[0][0]
+                        cond = cond_descs[cond_idx]
+                        desc_revised[i-step+1: i] = [s + f"/{cond}" for s in desc_revised[i-step+1: i]]
+                else:
                     desc_revised[i] = "w" + str(step) 
             else:
                 pass
-        elif d in all_cond_codes.flatten():  # use flatten, as flatten always returns a copy; need all_cond_codes to stay 2D
+        elif d not in codes_after_fixation and d in all_cond_codes.flatten():  # use flatten, as flatten always returns a copy; need all_cond_codes to stay 2D
             cond_idx = np.where(all_cond_codes == d)[0][0]
             cond = cond_descs[cond_idx]
             desc_revised[i-step: i] = [s + f"/{cond}" for s in desc_revised[i-step: i]]
-            step = 0
-    
+            
     annot_revised = mne.Annotations(onset=df_annot["onset"], duration=df_annot["duration"], description=desc_revised)
     return annot_revised
 

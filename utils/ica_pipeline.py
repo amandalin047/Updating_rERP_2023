@@ -64,6 +64,7 @@ def preprocess_for_ica(raw, *,
                        standard_montage: str | None=None,
                        eog_channels: list | None=None,
                        ref_channels: list | dict | None=None,
+                       return_raw_reref_only: bool=False,
                        time_threshold: float=3.0,
                        after_event_code_buffer: float=1.5,
                        before_event_code_buffer: float=0.5,
@@ -123,6 +124,8 @@ def preprocess_for_ica(raw, *,
         eeg_ch_names = [raw.ch_names[p] for p in eeg_picks]
         raw.apply_function(custom_ref, picks=eeg_picks, channel_wise=False,
                                        eeg_ch_names=eeg_ch_names, ref_channels=ref_channels)
+    if return_raw_reref_only:
+        return raw
     raw_reref = raw.copy()
     
     # detrend data (remove dc offset)
@@ -167,6 +170,25 @@ def preprocess_for_ica(raw, *,
     return raw_reref, raw_for_ica, rank
 
 
+def detrend_and_iir_bandpass(raw_to_filter, *,
+                             l_freq: float=0.1, h_freq: float=30.0,
+                             order: int=2,
+                             ftype: str="butter",
+                             verbose: bool=False):
+    # detrend data (remove dc offset)
+    raw_to_filter_copy = raw_to_filter.copy()
+    data = raw_to_filter_copy.get_data()
+    data_detrended = scipy.signal.detrend(data, axis=-1, type="constant")
+
+    raw_filtered = mne.io.RawArray(data=data_detrended, info=raw_to_filter_copy.info.copy()) 
+    raw_filtered = raw_filtered.set_annotations(raw_to_filter_copy.annotations.copy())
+    
+    iir_params=dict(order=order, ftype=ftype)
+    raw_filtered = raw_filtered.filter(l_freq=l_freq, h_freq=h_freq, method="iir",
+                                       iir_params=iir_params, verbose=verbose)
+    return raw_filtered
+
+
 # pass raw_reref as raw_to_clean (the raw object the ica solution is applied on must have the same sensor space as that which the ica algorithm was fitted on)
 def perform_ica(*, raw_to_clean, raw_for_ica,
                 n_components: int,
@@ -177,6 +199,8 @@ def perform_ica(*, raw_to_clean, raw_for_ica,
                 manual_inspection: bool=False,
                 corr_threshold: float=0.85,
                 eog_like_channels: list | None=None, 
+                l_freq: float=0.1, h_freq: float=30.0,
+                order: int=2, ftype: str="butter",
                 verbose: bool=False):
     """eog_like_channels is mandatory if the dataset contains no EOG channels;
     if data contains both HEOG (horizontal) and VEOG (vertical), consider only passing VEOG"""
@@ -213,32 +237,18 @@ def perform_ica(*, raw_to_clean, raw_for_ica,
     elif not manual_inspection:
         print(f"No blink components identified based on corr_threshold = {corr_threshold}. ICA not applied.")
 
-    # detrend data (remove dc offset)
-    raw_clean_copy = raw_clean.copy()
-    data = raw_clean_copy.get_data()
-    data_detrended = scipy.signal.detrend(data, axis=-1, type="constant")
-    raw_clean = mne.io.RawArray(data=data_detrended, info=raw_clean_copy.info.copy()) 
-    raw_clean = raw_clean.set_annotations(raw_clean_copy.annotations.copy())      
-    
-    bandpass_params_usual = mne.filter.create_filter(
-        data=raw_clean.get_data(),
-        sfreq=raw_clean.info["sfreq"],
-        l_freq=0.1, h_freq=30,  
-        method="iir",
-        iir_params={"order": 2, "ftype": "butter"},
-        verbose=True
-        )
-    raw_clean = raw_clean.copy().filter(l_freq=0.1, h_freq=30, method="iir",
-                                        iir_params=bandpass_params_usual, verbose=verbose)
-    
+    raw_clean_filt = detrend_and_iir_bandpass(raw_clean,
+                                              l_freq=l_freq, h_freq=h_freq,
+                                              order=order, ftype=ftype,
+                                              verbose=verbose)
     if manual_inspection:
         if verbose:
             print(f"Blink-like component indices identified via correlation (might be empty if no component crosses corr_threshold = {corr_threshold}): {eog_indices}.")
             print(f"Manaul inspection mode: ICA not applied. Estimating sources (from 0.1 - 30 Hz IIR order 2 bandpass filtered raw data) given the ICA unmixing matrix. Please also check ica.plot_properties() for better judgement.")
-        sources = ica.get_sources(raw_clean)
+        sources = ica.get_sources(raw_clean_filt)
         return sources, eog_indices, ica
     
-    return raw_clean, eog_indices, ica
+    return raw_clean_filt, eog_indices, ica
 
 
 if __name__ == "__main__":
