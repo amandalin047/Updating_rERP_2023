@@ -86,20 +86,21 @@ def revise_annot(df_annot: pd.DataFrame, *,
     return annot_revised
 
 def eeglab_logic_bin_epoch(raw: mne.io.Raw,
-                     fixation: str,
-                     non_final: str,
-                     codes_after_fixation: list|tuple|set|None,
-                     codes_after_fixation_are_final: bool,
-                     position_range: tuple,
-                     conditions_list: list,
-                     tmin: float, tmax: float,
-                     baseline: tuple | None,
-                     reject_peak_to_peak: dict | None,  # rejection (maximum peak-to-peak) is based on a signal difference calculated for each channel separately 
-                                                        # applying baseline correction does not affect the rejection procedure as the difference will be preserved.
-                                                        # peak-to-peak unit is in volts (V) for eeg  and eog channels
-                     resample: float | None=None,
-                     preload: bool=True,
-                     verbose: bool=False):
+                          fixation: str,
+                          non_final: str,
+                          *,
+                          position_range: tuple,
+                          conditions_list: list,
+                          codes_after_fixation: list|tuple|set|None=None,
+                          codes_after_fixation_are_final: bool=True,
+                          tmin: float=-0.1, tmax: float=0.5,
+                          baseline: tuple|None=None,
+                          reject_peak_to_peak: dict|None=None,  # rejection (maximum peak-to-peak) is based on a signal difference calculated for each channel separately 
+                                                                # applying baseline correction does not affect the rejection procedure as the difference will be preserved.
+                                                                # peak-to-peak unit is in volts (V) for eeg  and eog channels
+                          decim: int=1,
+                          preload: bool=True,
+                          verbose: bool=False):
     """condtitions_list should be a list of dicts, e.g.,
        [{'high_constraint': (240, 241, 242, 243), 'low_constraint': (244, 245, 246, 247)},
         {'emo_word': (240, 241, 244, 245), 'neu_word': (242, 243, 246, 247)}]"""
@@ -138,10 +139,9 @@ def eeglab_logic_bin_epoch(raw: mne.io.Raw,
                                                           # so the entire epoch is considered
                             detrend=None,                 # no detrending (already detrended externally using scipy before filtering)
                             reject_by_annotation=False,   # no 'bads' annotations anyway
+                            decim=decim,
                             event_repeated="error",
                             preload=preload,
                             verbose=verbose)
-        if resample is not None:
-            epochs = epochs.resample(sfreq=resample)
         epochs_list.append(epochs)
     return epochs_list
