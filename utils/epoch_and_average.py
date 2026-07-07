@@ -91,6 +91,7 @@ def eeglab_logic_bin_epoch(raw: mne.io.Raw,
                           *,
                           position_range: tuple,
                           conditions_list: list,
+                          revise_annotations: bool=True,
                           codes_after_fixation: list|tuple|set|None=None,
                           codes_after_fixation_are_final: bool=True,
                           tmin: float=-0.1, tmax: float=0.5,
@@ -118,14 +119,17 @@ def eeglab_logic_bin_epoch(raw: mne.io.Raw,
     
     epochs_list = []
     for conditions in conditions_list:
-        annot_revised = revise_annot(df_annot.copy(),
+        if revise_annotations:
+            annot_revised = revise_annot(df_annot.copy(),
                                  fixation=fixation,
                                  non_final=non_final,
                                  codes_after_fixation=codes_after_fixation,
                                  codes_after_fixation_are_final=codes_after_fixation_are_final,
                                  **conditions)
-        raw_revised = raw.copy()
-        raw_revised.set_annotations(annot_revised)
+            raw_revised = raw.copy()
+            raw_revised.set_annotations(annot_revised)
+        else:
+            raw_revised = raw.copy()
 
         events, event_id = mne.events_from_annotations(raw_revised)
         time_locks_descs = get_time_locks_descs(position_range, conditions)
