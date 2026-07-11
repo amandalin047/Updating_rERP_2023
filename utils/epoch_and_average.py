@@ -96,6 +96,7 @@ def eeglab_logic_bin_epoch(raw: mne.io.Raw,
                           codes_after_fixation_are_final: bool=True,
                           tmin: float=-0.1, tmax: float=0.5,
                           baseline: tuple|None=None,
+                          reject_by_annotation: bool=True,
                           reject_peak_to_peak: dict|None=None,  # rejection (maximum peak-to-peak) is based on a signal difference calculated for each channel separately 
                                                                 # applying baseline correction does not affect the rejection procedure as the difference will be preserved.
                                                                 # peak-to-peak unit is in volts (V) for eeg  and eog channels
@@ -142,7 +143,7 @@ def eeglab_logic_bin_epoch(raw: mne.io.Raw,
                             reject=reject_peak_to_peak,   # rejct_tmin and reject_tmax both default to None
                                                           # so the entire epoch is considered
                             detrend=None,                 # no detrending (already detrended externally using scipy before filtering)
-                            reject_by_annotation=False,   # no 'bads' annotations anyway
+                            reject_by_annotation=reject_by_annotation,   # no 'bads' annotations anyway
                             decim=decim,
                             event_repeated="error",
                             preload=preload,
