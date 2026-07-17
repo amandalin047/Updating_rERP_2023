@@ -86,6 +86,7 @@ def refit(subj_data: np.ndarray, *,
           X_tune: np.ndarray, X_refit: np.ndarray,
           ch_roi: list,
           alpha_range: np.ndarray,
+          lambda_common: float|None=None,
           ssp: bool=False, info: mne.Info|None=None,
           n_splits: int=5, ridge_tol: float=1e-4, solver: str="auto", max_iter: int|None=None,
           subj_data_mean: np.ndarray | None=None):
@@ -96,12 +97,14 @@ def refit(subj_data: np.ndarray, *,
     # in Ridge, the equivalnece holds when alpha is divided by the number of blocks
     # (if not divided, the block-mean version will get over-regularized due to alpha being too large)
 
-    RefitResults = namedtuple("RefitResults", ["coef", "pred", "r2", "solver", "n_iter"])
+    RefitResults = namedtuple("RefitResults", ["raw_alpha", "refit_alpha",
+                                               "coef", "pred", "r2", "solver", "n_iter"])
     
     if subj_data_mean is None:
         subj_data_mean = np.mean(subj_data, axis=0)
 
-    cv_results = tune_alpha(subj_data, X=X_tune,
+    if lambda_common is None:
+        cv_results = tune_alpha(subj_data, X=X_tune,
                             alpha_range=alpha_range,
                             ssp=ssp, info=info,
                             n_splits=n_splits,
@@ -109,7 +112,13 @@ def refit(subj_data: np.ndarray, *,
                             solver=solver,
                             max_iter=max_iter,
                             score_on_mean=False)
-    ridge = Ridge(alpha=cv_results.best_alpha/subj_data.shape[0], # scale best alpha by trial count
+        raw_alpha = cv_results.best_alpha
+        refit_alpha = cv_results.best_alpha/subj_data.shape[0] # scale best alpha by trial count
+    else:
+        refit_alpha = lambda_common
+        cv_results = None
+        raw_alpha = None
+    ridge = Ridge(alpha=refit_alpha, 
                   fit_intercept=False,         
                   tol=ridge_tol,
                   solver=solver,
@@ -132,7 +141,8 @@ def refit(subj_data: np.ndarray, *,
         solvers[ch] = ridge.solver_
         n_iters[ch] = ridge.n_iter_
 
-    refit_results = RefitResults(coefs, reconstruction, scores, solvers, n_iters)
+    refit_results = RefitResults(raw_alpha, refit_alpha,
+                                 coefs, reconstruction, scores, solvers, n_iters)
     return cv_results, refit_results
     
 
@@ -267,6 +277,7 @@ def nested_cv(subj_data: np.ndarray, *, X: np.ndarray,
 
     outer_scores = np.empty((n_splits_outer, len(roi_idx)))
     best_alphas = np.empty((n_splits_outer, ))
+    cv_results_per_outer = np.empty((n_splits_outer, ), dtype=object)
     for i, (train_outer_idx, test_outer_idx) in enumerate(kf.split(subj_data)):
         if verbose:
             print(f"OUTER FOLD {i+1}")
@@ -290,6 +301,7 @@ def nested_cv(subj_data: np.ndarray, *, X: np.ndarray,
                                 max_iter=max_iter,
                                 solver=solver,
                                 verbose=False)
+        cv_results_per_outer[i] = cv_results
         best_alphas[i] = cv_results.best_alpha
 
         ridge = Ridge(alpha=cv_results.best_alpha,
@@ -322,7 +334,7 @@ def nested_cv(subj_data: np.ndarray, *, X: np.ndarray,
                 outer_scores[i, j] = ridge.score(X_test_outer_stack,
                                                  y_test_outer_stack[ch, :])
 
-    return outer_scores, best_alphas
+    return outer_scores, best_alphas, cv_results_per_outer
 
 
 def loop_over_subjs(*, epochs_iterable: list|np.ndarray,
@@ -340,6 +352,8 @@ def loop_over_subjs(*, epochs_iterable: list|np.ndarray,
     
     outer_scores_full_per_subj = np.empty((len(epochs_iterable), ), dtype=object)
     outer_scores_restricted_per_subj = np.empty((len(epochs_iterable), ), dtype=object)
+    cv_results_full_per_subj = np.empty((len(epochs_iterable), ), dtype=object)
+    cv_results_restricted_per_subj = np.empty((len(epochs_iterable), ), dtype=object)
     best_alphas_per_subj = []
     
     if matrices_restricted_iterable is None:
@@ -358,7 +372,7 @@ def loop_over_subjs(*, epochs_iterable: list|np.ndarray,
             print(f"subject index [{i}]...")
         if verbose_tuning:
             print(">> restricted")
-        outer_scores_restricted, best_alphas_restricted = nested_cv(subj_data, X=X_restricted,
+        outer_scores_restricted, best_alphas_restricted, cv_results_restricted = nested_cv(subj_data, X=X_restricted,
                                                                   ssp=ssp, info=info,
                                                                   alpha_range=alpha_range,
                                                                   n_splits_outer=n_splits_outer, n_splits_inner=n_splits_inner,
@@ -366,9 +380,10 @@ def loop_over_subjs(*, epochs_iterable: list|np.ndarray,
                                                                   score_on_mean=False,
                                                                   verbose=verbose_tuning)
         outer_scores_restricted_per_subj[i] = outer_scores_restricted
+        cv_results_restricted_per_subj[i] = cv_results_restricted
         if verbose_tuning:
             print(">> full model")
-        outer_scores_full, best_alphas_full = nested_cv(subj_data, X=X_full,
+        outer_scores_full, best_alphas_full, cv_results_full = nested_cv(subj_data, X=X_full,
                                                        ssp=ssp, info=info,
                                                        alpha_range=alpha_range,
                                                        n_splits_outer=n_splits_outer, n_splits_inner=n_splits_inner,
@@ -376,12 +391,17 @@ def loop_over_subjs(*, epochs_iterable: list|np.ndarray,
                                                        score_on_mean=False,
                                                        verbose=verbose_tuning)
         outer_scores_full_per_subj[i] = outer_scores_full
+        cv_results_full_per_subj[i] = cv_results_full
         best_alphas_per_subj.append((best_alphas_restricted, best_alphas_full))
     
     LoopResults = namedtuple("LoopResults", ["outer_scores_full_per_subj",
                                              "outer_scores_restricted_per_subj",
+                                             "cv_results_full_per_subj",
+                                             "cv_results_restricted_per_subj",
                                              "best_alphas_per_subj"])
-    loop_results = LoopResults(outer_scores_full_per_subj, outer_scores_restricted_per_subj, best_alphas_per_subj)
+    loop_results = LoopResults(outer_scores_full_per_subj, outer_scores_restricted_per_subj,
+                               cv_results_full_per_subj, cv_results_restricted_per_subj,
+                               best_alphas_per_subj)
     return loop_results
 
 
@@ -390,7 +410,8 @@ def refit_all_subjs(*, epochs_iterable: list|np.ndarray,
                     matrices_iterable: list|np.ndarray,
                     matrix_refit: DeconvDesignMatrix,
                     ch_roi: list,
-                    alpha_range: np.array,
+                    alpha_range: np.ndarray|None,
+                    lambda_common: float|None=None,
                     ssp: bool=False, info: mne.Info|None=None,
                     n_splits: int=5,
                     ridge_tol: float=1e-4, solver: str="auto", max_iter: int|None=None,
@@ -399,7 +420,7 @@ def refit_all_subjs(*, epochs_iterable: list|np.ndarray,
     if verbose:
         print(X_refit.shape)
     
-    subj_alpha_tuned, subj_refit = [], []
+    subj_tuned, subj_refit = [], []
     for i, (epochs, evoked, matrix) in enumerate(zip(epochs_iterable, evokeds_iterable, matrices_iterable)):
         if verbose:
             print(f"subject index [{i}]...")
@@ -410,15 +431,16 @@ def refit_all_subjs(*, epochs_iterable: list|np.ndarray,
                                           X_tune=X_tune, X_refit=X_refit,
                                           ch_roi=ch_roi,
                                           alpha_range=alpha_range,
+                                          lambda_common=lambda_common,
                                           ssp=ssp, info=info,
                                           n_splits=n_splits,
                                           ridge_tol=ridge_tol,
                                           solver=solver,
                                           max_iter=max_iter,
                                           subj_data_mean=subj_evoked_data)
-        subj_alpha_tuned.append(cv_results)
+        subj_tuned.append(cv_results)
         subj_refit.append(refit_results)
-    return subj_alpha_tuned, subj_refit
+    return subj_tuned, subj_refit
 
 
 def compare_model_fit(outer_scores_full_per_subj: np.ndarray,
@@ -501,7 +523,8 @@ def time_window_heatmap(window_coefs, *,
                         pad: float=0.02,
                         cbar_label_fontsize: float=7.0,
                         component_name: str="N400",
-                        emotion_category: str="All Emotions Collapsed"):
+                        emotion_category: str="All Emotions Collapsed",
+                        alt_title: str|None=None):
     
     beta_window = window_coefs.beta_window
     times_ms = np.arange(int(time_window[0]*1000), int(time_window[1]*1000)+1, dt)
@@ -539,7 +562,10 @@ def time_window_heatmap(window_coefs, *,
     axes.set_xticks(np.arange(int(time_window[0]*1000), int(time_window[1]*1000)+1, 5*dt))
     axes.set_xlabel("Lag from word onset (ms)", fontsize=xy_label_fontsize)
     axes.set_ylabel("Channel", fontsize=xy_label_fontsize)
-    axes.set_title(f"Mean Subject-Wise CV-Tuned Ridge Coefficient for Log Word Positiom in {component_name} Window,\n{emotion_category}. Black Dots Indicate Significance, {cor}", fontsize=title_fontsize)
+    if alt_title is None:
+        axes.set_title(f"Mean Subject-Wise CV-Tuned Ridge Coefficient for Log Word Positiom in {component_name} Window,\n{emotion_category}. Black Dots Indicate Significance, {cor}", fontsize=title_fontsize)
+    else:
+        axes.set_title(alt_title)
 
     axes.set_xticks(times_ms, minor=True)
     axes.set_yticks(np.arange(len(ch_roi)) + 1, minor=True)
