@@ -87,6 +87,7 @@ def refit(subj_data: np.ndarray, *,
           ch_roi: list,
           alpha_range: np.ndarray,
           lambda_common: float|None=None,
+          score_on_mean: bool=True,
           ssp: bool=False, info: mne.Info|None=None,
           n_splits: int=5, ridge_tol: float=1e-4, solver: str="auto", max_iter: int|None=None,
           subj_data_mean: np.ndarray | None=None):
@@ -97,7 +98,7 @@ def refit(subj_data: np.ndarray, *,
     # in Ridge, the equivalnece holds when alpha is divided by the number of blocks
     # (if not divided, the block-mean version will get over-regularized due to alpha being too large)
 
-    RefitResults = namedtuple("RefitResults", ["raw_alpha", "refit_alpha",
+    RefitResults = namedtuple("RefitResults", ["raw_best_alpha", "refit_alpha",
                                                "coef", "pred", "r2", "solver", "n_iter"])
     
     if subj_data_mean is None:
@@ -111,13 +112,16 @@ def refit(subj_data: np.ndarray, *,
                             ridge_tol=ridge_tol,
                             solver=solver,
                             max_iter=max_iter,
-                            score_on_mean=False)
-        raw_alpha = cv_results.best_alpha
-        refit_alpha = cv_results.best_alpha/subj_data.shape[0] # scale best alpha by trial count
+                            score_on_mean=score_on_mean)
+        raw_best_alpha = cv_results.best_alpha
+        if score_on_mean:
+            refit_alpha = raw_best_alpha
+        else:
+            refit_alpha = cv_results.best_alpha/subj_data.shape[0] # scale best alpha by trial count
     else:
         refit_alpha = lambda_common
         cv_results = None
-        raw_alpha = None
+        raw_best_alpha = None
     ridge = Ridge(alpha=refit_alpha, 
                   fit_intercept=False,         
                   tol=ridge_tol,
@@ -141,7 +145,7 @@ def refit(subj_data: np.ndarray, *,
         solvers[ch] = ridge.solver_
         n_iters[ch] = ridge.n_iter_
 
-    refit_results = RefitResults(raw_alpha, refit_alpha,
+    refit_results = RefitResults(raw_best_alpha, refit_alpha,
                                  coefs, reconstruction, scores, solvers, n_iters)
     return cv_results, refit_results
     
@@ -154,13 +158,15 @@ def tune_alpha(ridge_data: np.ndarray, *, X: np.ndarray,
                ridge_tol: float=1e-4, solver: str="auto", max_iter: int|None=None,
                score_on_mean: bool=True,
                verbose: bool=False):
-    """ridge_data.shape = (n_trials, n_channels, n_time_samples); n_time_samples is total, not per trial
+    """ridge_data.shape = (n_trials, n_channels, n_time_samples); n_time_samples is per trial
                           if doing LOO (e.g., training on 19 subjects, testing on 1), n_trials = n_subjects (but this does not work well)
        design matrix X.shape = (n_time_samples, n_predictors * n_lags)
        alpha_range in single-subject-level range (not divided by n_subj-1)
        if ssp is True, ridge_data should contain the full channel set needed for SSP, then only later restrict reporting / inference
        to ROI channels, where roi_idx must refer to the channel indices of the original full channel set.
-       (If ridge_data contains only the ROI channels, then SSP is not very meaningful.)"""
+       (If ridge_data contains only the ROI channels, then SSP is not very meaningful.)
+       score_on_mean=True should NOT be used for a trial-specific permutation design where each trial has a different X_i, unless you explicitly intend to fit the averaged design matrix
+    """
     
     ScoreResults = namedtuple("ScoreResults", ["train_scores", "train_mean", "train_std",
                                                "valid_scores", "valid_mean", "valid_std"])
@@ -227,18 +233,20 @@ def tune_alpha(ridge_data: np.ndarray, *, X: np.ndarray,
                 if verbose:
                     print(f"    Channel Index {ch}")
 
-                ridge.fit(X_train_stack, y_train_stack[ch, :])
+                #ridge.fit(X_train_stack, y_train_stack[ch, :])
 
                 if score_on_mean:
                     #X_train_mean = np.mean(X_split[train_idx], axis=0)  <- move outside of channel loop
                     #X_valid_mean = np.mean(X_split[valid_idx], axis=0)  <- move outside of channel loop
                     y_train_per_ch_mean = np.mean(y_train[:, ch, :], axis=0)
                     y_valid_per_ch_mean = np.mean(y_valid[:, ch, :], axis=0)
+                    ridge.fit(X_train_mean, y_train_per_ch_mean)
                     train_scores[i, j, k] = ridge.score(X_train_mean,
                                                         y_train_per_ch_mean)
                     valid_scores[i, j, k] = ridge.score(X_valid_mean,
                                                         y_valid_per_ch_mean)
                 else:
+                    ridge.fit(X_train_stack, y_train_stack[ch, :])
                     train_scores[i, j, k] = ridge.score(X_train_stack,
                                                         y_train_stack[ch, :])
                     valid_scores[i, j, k] = ridge.score(X_valid_stack,
