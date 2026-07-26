@@ -575,7 +575,7 @@ def time_window_heatmap(window_coefs, *,
     if alt_title is None:
         axes.set_title(f"Mean Subject-Wise CV-Tuned Ridge Coefficient for Log Word Position in {component_name} Window,\n{emotion_category}. Black Dots Indicate Significance, {cor}", fontsize=title_fontsize)
     else:
-        axes.set_title(alt_title)
+        axes.set_title(alt_title, fontsize=title_fontsize)
 
     axes.set_xticks(times_ms, minor=True)
     axes.set_yticks(np.arange(len(ch_roi)) + 1, minor=True)
