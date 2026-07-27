@@ -455,7 +455,7 @@ def refit_all_subjs(*, epochs_iterable: list|np.ndarray,
 
 def compare_model_fit(outer_scores_full_per_subj: np.ndarray,
                       outer_scores_restricted_per_subj: np.ndarray,
-                      ch_roi: list) -> pd.DataFrame:
+                      ch_roi: list) -> tuple:
     """outer_scores_full_per_subj.shape = outer_scores_restricted_per_subj.shape = (n_subj,)"""
     
     delta_r2_per_subj = outer_scores_full_per_subj - outer_scores_restricted_per_subj
@@ -464,20 +464,22 @@ def compare_model_fit(outer_scores_full_per_subj: np.ndarray,
 
     outer_scores_full = np.array([s for s in outer_scores_full_per_subj])
     outer_scores_restricted = np.array([s for s in outer_scores_restricted_per_subj])
-    outer_scores_full_mean = np.mean(np.mean(outer_scores_full, axis=1), axis=0)
-    outer_scores_restricted_mean = np.mean(np.mean(outer_scores_restricted, axis=1), axis=0)
+    outer_scores_full_mean = np.mean(outer_scores_full, axis=1)
+    outer_scores_restricted_mean = np.mean(outer_scores_restricted, axis=1)
 
     improve = [ttest_1samp(delta_r2_fold_mean[:, i], 0.0, alternative="greater")
                                            for i in range(delta_r2.shape[-1])]
     ts = [im.statistic for im in improve]
     ps = [im.pvalue for im in improve]
+    dfs = [im.df for im in improve]
     _, qs = fdrcorrection(ps, alpha=0.01, method="indep", is_sorted=False)
-    improve_df = pd.DataFrame({"R^2 (full)": outer_scores_full_mean,
-                               "R^2 (intercept)": outer_scores_restricted_mean,
-                               "delta R^2": np.mean(delta_r2_fold_mean, axis=0),
-                               "t-statistic": ts, "p-val": ps, "q-val (fdr)": qs})
+    improve_df = pd.DataFrame({"mean R^2 (full)": np.mean(outer_scores_full_mean, axis=0),
+                               "mean R^2 (intercept)": np.mean(outer_scores_restricted_mean, axis=0),
+                               "mean delta R^2": np.mean(delta_r2_fold_mean, axis=0),
+                               "std delta R^2": np.std(delta_r2_fold_mean, axis=0, ddof=1),
+                               "t-statistic": ts, "p-val": ps, "q-val (fdr)": qs, "df": dfs})
     improve_df = improve_df.rename(index={ch_roi.index(ch): ch for ch in ch_roi})
-    return improve_df
+    return improve_df, improve
 
 
 def get_time_window_coefs(subj_refit: list, *,
