@@ -523,6 +523,7 @@ def time_window_heatmap(window_coefs, *,
                         time_window: tuple,
                         dt: int,
                         ch_roi: list,
+                        show_sig: bool=True,
                         show_corrected: bool=True,
                         figsize: tuple=(7, 3),
                         cmap: str="RdBu_r",
@@ -541,14 +542,7 @@ def time_window_heatmap(window_coefs, *,
     beta_window = window_coefs.beta_window
     times_ms = np.arange(int(time_window[0]*1000), int(time_window[1]*1000)+1, dt)
     assert beta_window.shape[2] == len(times_ms)
-
     heat_data = beta_window.mean(axis=0)  # shape: (n_ch_roi, n_time_window_time_points) subject-mean beta heatmap: channels × time
-    if show_corrected:
-        sig_mask = window_coefs.reject
-        cor = "FDR-Corrected"
-    else:
-        sig_mask = window_coefs.beta_ps < window_coefs.sig_thresh
-        cor = f"Non-Corrected (p < {window_coefs.sig_thresh})"
 
     fig, axes = plt.subplots(figsize=figsize)
 
@@ -564,8 +558,17 @@ def time_window_heatmap(window_coefs, *,
                            cmap=cmap,
                            vmin=-vmax,
                            vmax=vmax)
-    yy, xx = np.where(sig_mask)
-    axes.scatter(times_ms[xx], yy+0.5, marker=".", s=s, color="black", linewidth=0)
+    if show_sig:
+        if show_corrected:
+            sig_mask = window_coefs.reject
+            cor = " Black Dots Indicate T-Test against 0 Significance, FDR-Corrected"
+        else:
+            sig_mask = window_coefs.beta_ps < window_coefs.sig_thresh
+            cor = f" Black Dots Indicate T-Test against 0 Significance, Non-Corrected (p < {window_coefs.sig_thresh})"
+        yy, xx = np.where(sig_mask)
+        axes.scatter(times_ms[xx], yy+0.5, marker=".", s=s, color="black", linewidth=0)
+    else:
+        cor = ""
 
     axes.set_yticks(np.arange(len(ch_roi)) + 0.5)
     axes.set_yticklabels(ch_roi)
@@ -575,7 +578,7 @@ def time_window_heatmap(window_coefs, *,
     axes.set_xlabel("Lag from word onset (ms)", fontsize=xy_label_fontsize)
     axes.set_ylabel("Channel", fontsize=xy_label_fontsize)
     if alt_title is None:
-        axes.set_title(f"Mean Subject-Wise CV-Tuned Ridge Coefficient for Log Word Position in {component_name} Window,\n{emotion_category}. Black Dots Indicate Significance, {cor}", fontsize=title_fontsize)
+        axes.set_title(f"Mean Subject-Wise CV-Tuned Ridge Coefficient for Log Word Position in {component_name} Window,\n{emotion_category}.{cor}", fontsize=title_fontsize)
     else:
         axes.set_title(alt_title, fontsize=title_fontsize)
 
